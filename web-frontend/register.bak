@@ -1,0 +1,1308 @@
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
+import { Link } from "expo-router";
+import type { ReactNode } from "react";
+import { useMemo, useState } from "react";
+import type { TextInputProps } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Image,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+
+const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:5000/api";
+
+type Attachment = {
+  uri: string;
+  base64?: string;
+  mimeType?: string;
+} | null;
+
+type RegionNode = {
+  name: string;
+  provinces: {
+    name: string;
+    municipalities: {
+      name: string;
+      barangays: { name: string; zipCode: string }[];
+    }[];
+  }[];
+};
+
+const REGION_TREE: RegionNode[] = [
+  {
+    name: "NCR",
+    provinces: [
+      {
+        name: "Metro Manila",
+        municipalities: [
+          {
+            name: "Quezon City",
+            barangays: [
+              { name: "Batasan Hills", zipCode: "1126" },
+              { name: "Diliman", zipCode: "1101" },
+            ],
+          },
+          {
+            name: "Pasig",
+            barangays: [
+              { name: "Santolan", zipCode: "1610" },
+              { name: "Bagong Ilog", zipCode: "1600" },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: "Central Visayas",
+    provinces: [
+      {
+        name: "Cebu",
+        municipalities: [
+          {
+            name: "Cebu City",
+            barangays: [
+              { name: "Guadalupe", zipCode: "6000" },
+              { name: "Lahug", zipCode: "6000" },
+            ],
+          },
+          {
+            name: "Mandaue",
+            barangays: [
+              { name: "Banilad", zipCode: "6014" },
+              { name: "Basak", zipCode: "6014" },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+];
+
+type Address = {
+  region: string;
+  province: string;
+  municipality: string;
+  barangay: string;
+  zipCode: string;
+  houseNumber: string;
+  street: string;
+};
+
+type AttachmentGroup = {
+  front: Attachment;
+  back: Attachment;
+};
+
+type FormState = {
+  accountInfo: {
+    mobileNumber: string;
+    region: string;
+    vehicleType: string;
+    employmentType: "full-time" | "part-time";
+  };
+  personalInfo: {
+    firstName: string;
+    middleName: string;
+    lastName: string;
+    email: string;
+    dateOfBirth: string;
+    sex: "male" | "female" | "prefer-not-to-answer";
+    address: Address;
+    profilePhoto: Attachment;
+  };
+  driversLicense: {
+    dlNumber: string;
+    dlExpiry: string;
+    images: AttachmentGroup;
+  };
+  emergencyContact: {
+    name: string;
+    relationship: string;
+    phoneNumber: string;
+  };
+  vehicleInfo: {
+    make: string;
+    model: string;
+    year: string;
+    color: string;
+    plateNumber: string;
+  };
+  vehicleDocuments: {
+    registrationNumber: string;
+    registrationExpiry: string;
+    orCrImage: Attachment;
+  };
+  vehiclePhotos: AttachmentGroup;
+  vehicleOwnership: {
+    ownerName: string;
+    ownershipType: "owned" | "company" | "rented";
+    supportingDoc: Attachment;
+  };
+  governmentIds: {
+    tinNumber: string;
+    sssNumber: string;
+  };
+};
+
+const Section = ({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) => (
+  <View style={styles.section}>
+    <Text style={styles.sectionTitle}>{title}</Text>
+    {children}
+  </View>
+);
+
+type LabeledInputProps = {
+  label: string;
+  multiline?: boolean;
+} & TextInputProps;
+
+const LabeledInput = ({ label, multiline, ...props }: LabeledInputProps) => (
+  <View style={styles.field}>
+    <Text style={styles.label}>{label}</Text>
+    <TextInput
+      style={[styles.input, multiline && styles.multilineInput]}
+      placeholderTextColor="#999"
+      multiline={multiline}
+      {...props}
+    />
+  </View>
+);
+
+const AttachmentPicker = ({
+  label,
+  value,
+  onPick,
+}: {
+  label: string;
+  value: Attachment;
+  onPick: () => void;
+}) => (
+  <View style={styles.attachmentRow}>
+    <View style={styles.attachmentInfo}>
+      <Text style={styles.label}>{label}</Text>
+      {value?.uri ? (
+        <Image source={{ uri: value.uri }} style={styles.attachmentPreview} />
+      ) : (
+        <Text style={styles.attachmentPlaceholder}>No file selected</Text>
+      )}
+    </View>
+    <TouchableOpacity style={styles.secondaryButton} onPress={onPick}>
+      <Text style={styles.secondaryButtonText}>
+        {value ? "Replace" : "Upload"}
+      </Text>
+    </TouchableOpacity>
+  </View>
+);
+
+const SelectField = ({
+  label,
+  value,
+  placeholder,
+  onPress,
+  disabled,
+}: {
+  label: string;
+  value?: string;
+  placeholder: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) => (
+  <TouchableOpacity
+    style={[styles.selectField, disabled && styles.selectFieldDisabled]}
+    onPress={disabled ? undefined : onPress}
+    activeOpacity={disabled ? 1 : 0.8}
+  >
+    <Text style={styles.label}>{label}</Text>
+    <View style={styles.selectFieldValueContainer}>
+      <Text
+        style={value ? styles.selectFieldValue : styles.selectFieldPlaceholder}
+      >
+        {value || placeholder}
+      </Text>
+      <MaterialCommunityIcons
+        name="chevron-down"
+        size={20}
+        color={disabled ? "#ccc" : "#555"}
+      />
+    </View>
+  </TouchableOpacity>
+);
+
+const ProfilePhotoCard = ({
+  value,
+  onTakePhoto,
+  onUploadPhoto,
+}: {
+  value: Attachment;
+  onTakePhoto: () => void;
+  onUploadPhoto: () => void;
+}) => (
+  <View style={styles.profilePhotoCard}>
+    {value?.uri ? (
+      <Image source={{ uri: value.uri }} style={styles.profilePhoto} />
+    ) : (
+      <View style={styles.profilePhotoPlaceholder}>
+        <MaterialCommunityIcons name="camera" size={28} color="#999" />
+        <Text style={styles.attachmentPlaceholder}>No photo selected</Text>
+      </View>
+    )}
+    <View style={styles.profilePhotoActions}>
+      <TouchableOpacity style={styles.secondaryButton} onPress={onTakePhoto}>
+        <Text style={styles.secondaryButtonText}>Take photo</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.secondaryButton} onPress={onUploadPhoto}>
+        <Text style={styles.secondaryButtonText}>Upload</Text>
+      </TouchableOpacity>
+    </View>
+  </View>
+);
+
+const SelectionModal = ({
+  visible,
+  title,
+  options,
+  onSelect,
+  onClose,
+}: {
+  visible: boolean;
+  title: string;
+  options: SelectionOption[];
+  onSelect: (value: string) => void;
+  onClose: () => void;
+}) => (
+  <Modal visible={visible} animationType="slide" transparent>
+    <View style={styles.modalBackdrop}>
+      <View style={styles.modalCard}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>{title}</Text>
+          <TouchableOpacity onPress={onClose}>
+            <MaterialCommunityIcons name="close" size={22} color="#111" />
+          </TouchableOpacity>
+        </View>
+        <FlatList
+          data={options}
+          keyExtractor={(item) => item.value}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.modalItem}
+              onPress={() => onSelect(item.value)}
+            >
+              <Text style={styles.modalItemLabel}>{item.label}</Text>
+              {item.subtitle ? (
+                <Text style={styles.modalSubtitle}>{item.subtitle}</Text>
+              ) : null}
+            </TouchableOpacity>
+          )}
+          ListEmptyComponent={
+            <Text style={styles.modalSubtitle}>No options available</Text>
+          }
+        />
+      </View>
+    </View>
+  </Modal>
+);
+
+export default function RegisterScreen() {
+  const [formData, setFormData] = useState<FormState>(createInitialFormState());
+  const [submitting, setSubmitting] = useState(false);
+  const [selectionKind, setSelectionKind] = useState<SelectionKind | null>(
+    null,
+  );
+  const [selectionOptions, setSelectionOptions] = useState<SelectionOption[]>(
+    [],
+  );
+  const [selectionVisible, setSelectionVisible] = useState(false);
+
+  const sexOptions = useMemo(
+    () => [
+      { value: "male", label: "Male" },
+      { value: "female", label: "Female" },
+      { value: "prefer-not-to-answer", label: "Prefer not to say" },
+    ],
+    [],
+  );
+
+  const employmentOptions = useMemo(
+    () => [
+      { value: "full-time", label: "Full-time" },
+      { value: "part-time", label: "Part-time" },
+    ],
+    [],
+  );
+
+  const ownershipOptions = useMemo(
+    () => [
+      { value: "owned", label: "Owned" },
+      { value: "company", label: "Company" },
+      { value: "rented", label: "Rented" },
+    ],
+    [],
+  );
+
+  const updateField = (
+    section: keyof FormState,
+    field: string,
+    value: unknown,
+  ) => {
+    setFormData((current) => ({
+      ...current,
+      [section]: {
+        ...(current[section] as Record<string, unknown>),
+        [field]: value,
+      },
+    }));
+  };
+
+  const updateAddress = (updates: Partial<typeof personalAddress>) => {
+    setFormData((current) => ({
+      ...current,
+      personalInfo: {
+        ...current.personalInfo,
+        address: {
+          ...current.personalInfo.address,
+          ...updates,
+        },
+      },
+    }));
+  };
+
+  const findRegion = (name: string) =>
+    REGION_TREE.find((region) => region.name === name);
+
+  const findProvince = (provinceName: string) =>
+    findRegion(personalAddress.region)?.provinces.find(
+      (province) => province.name === provinceName,
+    );
+
+  const findMunicipality = (municipalityName: string) =>
+    findProvince(personalAddress.province)?.municipalities.find(
+      (municipality) => municipality.name === municipalityName,
+    );
+
+  const buildOptions = (context: SelectionContext): SelectionOption[] => {
+    if (!context) return [];
+    if (context === "accountRegion" || context === "region") {
+      return REGION_TREE.map((region) => ({
+        label: region.name,
+        value: region.name,
+      }));
+    }
+
+    if (context === "province") {
+      const selectedRegion = findRegion(personalAddress.region);
+      return selectedRegion
+        ? selectedRegion.provinces.map((province) => ({
+            label: province.name,
+            value: province.name,
+          }))
+        : [];
+    }
+
+    if (context === "municipality") {
+      const selectedProvince = findProvince(personalAddress.province);
+      return selectedProvince
+        ? selectedProvince.municipalities.map((municipality) => ({
+            label: municipality.name,
+            value: municipality.name,
+          }))
+        : [];
+    }
+
+    if (context === "barangay") {
+      const selectedMunicipality = findMunicipality(
+        personalAddress.municipality,
+      );
+      return selectedMunicipality
+        ? selectedMunicipality.barangays.map((barangay) => ({
+            label: barangay.name,
+            value: barangay.name,
+            subtitle: `ZIP ${barangay.zipCode}`,
+          }))
+        : [];
+    }
+
+    return [];
+  };
+
+  const openSelection = (context: SelectionContext) => {
+    const options = buildOptions(context);
+    if (!options.length) return;
+    setSelectionOptions(options);
+    setSelectionContext(context);
+    setAddressModalVisible(true);
+  };
+
+  const handleSelectOption = (selectedValue: string) => {
+    if (!selectionContext) return;
+
+    switch (selectionContext) {
+      case "accountRegion":
+        updateField("accountInfo", "region", selectedValue);
+        break;
+      case "region":
+        updateAddress({
+          region: selectedValue,
+          province: "",
+          municipality: "",
+          barangay: "",
+          zipCode: "",
+        });
+        break;
+      case "province":
+        updateAddress({
+          province: selectedValue,
+          municipality: "",
+          barangay: "",
+          zipCode: "",
+        });
+        break;
+      case "municipality":
+        updateAddress({
+          municipality: selectedValue,
+          barangay: "",
+          zipCode: "",
+        });
+        break;
+      case "barangay":
+        {
+          const barangay = findMunicipality(
+            personalAddress.municipality,
+          )?.barangays.find((item) => item.name === selectedValue);
+          updateAddress({
+            barangay: selectedValue,
+            zipCode: barangay?.zipCode ?? personalAddress.zipCode,
+          });
+        }
+        break;
+      default:
+        break;
+    }
+
+    setSelectionContext(null);
+    setAddressModalVisible(false);
+  };
+
+  const applyImageResult = (
+    section: keyof FormState,
+    field: string,
+    asset: ImagePicker.ImagePickerAsset,
+  ) => {
+    updateField(section, field, {
+      uri: asset.uri,
+      base64: asset.base64,
+      mimeType: asset.mimeType ?? "image/jpeg",
+    });
+  };
+
+  const pickFromLibrary = async (section: keyof FormState, field: string) => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert(
+        "Permission needed",
+        "Please grant photo library access to continue.",
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.7,
+      base64: true,
+    });
+
+    if (!result.canceled) {
+      applyImageResult(section, field, result.assets[0]);
+    }
+  };
+
+  const takePhoto = async (section: keyof FormState, field: string) => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert(
+        "Permission needed",
+        "Please grant camera access to continue.",
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.7,
+      base64: true,
+    });
+
+    if (!result.canceled) {
+      applyImageResult(section, field, result.assets[0]);
+    }
+  };
+
+  const requestImage = pickFromLibrary;
+
+  const requiredFields = [
+    { section: "accountInfo", field: "mobileNumber", label: "Mobile number" },
+    { section: "accountInfo", field: "region", label: "Region" },
+    { section: "accountInfo", field: "vehicleType", label: "Vehicle type" },
+    { section: "personalInfo", field: "firstName", label: "First name" },
+    { section: "personalInfo", field: "lastName", label: "Last name" },
+    { section: "personalInfo", field: "email", label: "Email address" },
+    { section: "personalInfo", field: "dateOfBirth", label: "Date of birth" },
+    { section: "personalInfo", field: "address", label: "Current address" },
+    {
+      section: "driversLicense",
+      field: "dlNumber",
+      label: "Driver's license number",
+    },
+    {
+      section: "driversLicense",
+      field: "dlExpiry",
+      label: "Driver's license expiry",
+    },
+    {
+      section: "emergencyContact",
+      field: "name",
+      label: "Emergency contact name",
+    },
+    {
+      section: "emergencyContact",
+      field: "phoneNumber",
+      label: "Emergency contact number",
+    },
+    { section: "governmentIds", field: "tinNumber", label: "TIN number" },
+    { section: "governmentIds", field: "sssNumber", label: "SSS number" },
+  ] as const;
+
+  const serializeAttachment = (attachment: Attachment) =>
+    attachment
+      ? {
+          base64: attachment.base64,
+          mimeType: attachment.mimeType ?? "image/jpeg",
+        }
+      : null;
+
+  const validateForm = () => {
+    const missing = requiredFields.filter(({ section, field }) => {
+      const value = (formData as Record<string, any>)[section][field];
+      return !value;
+    });
+
+    if (missing.length) {
+      Alert.alert(
+        "Incomplete",
+        `Please provide the following: ${missing.map((item) => item.label).join(", ")}`,
+      );
+      return false;
+    }
+
+    if (!formData.personalInfo.profilePhoto) {
+      Alert.alert(
+        "Profile photo required",
+        "Please upload a clear profile picture.",
+      );
+      return false;
+    }
+
+    const addressFields = [
+      { key: "region", label: "Region" },
+      { key: "province", label: "Province" },
+      { key: "municipality", label: "Municipality/City" },
+      { key: "barangay", label: "Barangay" },
+    ] as const;
+
+    const missingAddress = addressFields.filter(
+      ({ key }) => !(personalAddress as Record<string, string>)[key],
+    );
+
+    if (missingAddress.length) {
+      Alert.alert(
+        "Complete address",
+        `Please provide: ${missingAddress.map((item) => item.label).join(", ")}`,
+      );
+      return false;
+    }
+
+    if (
+      !formData.driversLicense.frontImage ||
+      !formData.driversLicense.backImage
+    ) {
+      Alert.alert(
+        "Driver's license images",
+        "Upload both front and back images of your professional driver's license.",
+      );
+      return false;
+    }
+
+    if (!formData.vehicleDocuments.orCrImage) {
+      Alert.alert(
+        "Vehicle document",
+        "Upload a readable photo of your OR/CR document.",
+      );
+      return false;
+    }
+
+    if (!formData.vehiclePhotos.front || !formData.vehiclePhotos.rear) {
+      Alert.alert(
+        "Vehicle photos",
+        "Please upload at least the front and rear photos of your vehicle.",
+      );
+      return false;
+    }
+
+    if (formData.driversLicense.licenseType !== "professional") {
+      Alert.alert(
+        "Professional license required",
+        "Only professional driver's licenses are allowed.",
+      );
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleSubmit = async () => {
+    if (submitting) return;
+    if (!validateForm()) return;
+
+    setSubmitting(true);
+    try {
+      const payload = {
+        accountInfo: {
+          ...formData.accountInfo,
+        },
+        personalInfo: {
+          ...formData.personalInfo,
+          profilePhoto: serializeAttachment(formData.personalInfo.profilePhoto),
+        },
+        driversLicense: {
+          ...formData.driversLicense,
+          frontImage: serializeAttachment(formData.driversLicense.frontImage),
+          backImage: serializeAttachment(formData.driversLicense.backImage),
+        },
+        emergencyContact: {
+          ...formData.emergencyContact,
+        },
+        vehicleInfo: {
+          ...formData.vehicleInfo,
+        },
+        vehicleDocuments: {
+          ...formData.vehicleDocuments,
+          orCrImage: serializeAttachment(formData.vehicleDocuments.orCrImage),
+        },
+        vehiclePhotos: {
+          front: serializeAttachment(formData.vehiclePhotos.front),
+          rear: serializeAttachment(formData.vehiclePhotos.rear),
+        },
+        vehicleOwnership: {
+          ...formData.vehicleOwnership,
+          supportingDoc: serializeAttachment(
+            formData.vehicleOwnership.supportingDoc,
+          ),
+        },
+        governmentIds: {
+          ...formData.governmentIds,
+        },
+      };
+
+      const response = await fetch(`${API_BASE_URL}/driver-applications`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to submit application");
+      }
+
+      Alert.alert(
+        "Application received",
+        "Thank you! Our team will review your documents and contact you shortly.",
+      );
+      setFormData(createInitialFormState());
+    } catch (error) {
+      Alert.alert("Submission failed", (error as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <ScrollView
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
+    >
+      <MaterialCommunityIcons
+        name="motorbike"
+        size={96}
+        color="#1E90FF"
+        style={styles.logo}
+      />
+      <Text style={styles.title}>Apply as a MotoRide Driver</Text>
+
+      <Section title="Account information">
+        <LabeledInput
+          label="Mobile number"
+          placeholder="e.g. +63 917 123 4567"
+          keyboardType="phone-pad"
+          value={formData.accountInfo.mobileNumber}
+          onChangeText={(text) =>
+            updateField("accountInfo", "mobileNumber", text)
+          }
+        />
+        <SelectField
+          label="Region"
+          value={formData.accountInfo.region}
+          placeholder="Select region"
+          onPress={() => openSelection("accountRegion")}
+        />
+        <LabeledInput
+          label="Vehicle type"
+          placeholder="Motorcycle, Tricycle, etc."
+          value={formData.accountInfo.vehicleType}
+          onChangeText={(text) =>
+            updateField("accountInfo", "vehicleType", text)
+          }
+        />
+        <Text style={styles.label}>Employment availability</Text>
+        <View style={styles.pillRow}>
+          {employmentOptions.map((option) => (
+            <View key={option.value} style={styles.pillWrapper}>
+              <OptionPill
+                label={option.label}
+                selected={formData.accountInfo.employmentType === option.value}
+                onPress={() =>
+                  updateField("accountInfo", "employmentType", option.value)
+                }
+              />
+            </View>
+          ))}
+        </View>
+      </Section>
+
+      <Section title="Personal information">
+        <LabeledInput
+          label="First name"
+          value={formData.personalInfo.firstName}
+          onChangeText={(text) =>
+            updateField("personalInfo", "firstName", text)
+          }
+        />
+        <LabeledInput
+          label="Middle name"
+          value={formData.personalInfo.middleName}
+          onChangeText={(text) =>
+            updateField("personalInfo", "middleName", text)
+          }
+        />
+        <LabeledInput
+          label="Last name"
+          value={formData.personalInfo.lastName}
+          onChangeText={(text) => updateField("personalInfo", "lastName", text)}
+        />
+        <LabeledInput
+          label="Email address"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          value={formData.personalInfo.email}
+          onChangeText={(text) => updateField("personalInfo", "email", text)}
+        />
+        <LabeledInput
+          label="Date of birth"
+          placeholder="YYYY-MM-DD"
+          value={formData.personalInfo.dateOfBirth}
+          onChangeText={(text) =>
+            updateField("personalInfo", "dateOfBirth", text)
+          }
+        />
+        <Text style={styles.label}>Sex</Text>
+        <View style={styles.pillRow}>
+          {sexOptions.map((option) => (
+            <View key={option.value} style={styles.pillWrapper}>
+              <OptionPill
+                label={option.label}
+                selected={formData.personalInfo.sex === option.value}
+                onPress={() => updateField("personalInfo", "sex", option.value)}
+              />
+            </View>
+          ))}
+        </View>
+        <Text style={styles.label}>Current address</Text>
+        <SelectField
+          label="Region"
+          value={personalAddress.region}
+          placeholder="Select region"
+          onPress={() => openSelection("region")}
+        />
+        <SelectField
+          label="Province"
+          value={personalAddress.province}
+          placeholder={
+            personalAddress.region ? "Select province" : "Select region first"
+          }
+          disabled={!personalAddress.region}
+          onPress={() => openSelection("province")}
+        />
+        <SelectField
+          label="Municipality/City"
+          value={personalAddress.municipality}
+          placeholder={
+            personalAddress.province ? "Select city" : "Select province first"
+          }
+          disabled={!personalAddress.province}
+          onPress={() => openSelection("municipality")}
+        />
+        <SelectField
+          label="Barangay"
+          value={personalAddress.barangay}
+          placeholder={
+            personalAddress.municipality
+              ? "Select barangay"
+              : "Select city first"
+          }
+          disabled={!personalAddress.municipality}
+          onPress={() => openSelection("barangay")}
+        />
+        <View style={styles.addressRow}>
+          <View style={styles.addressColumn}>
+            <LabeledInput
+              label="ZIP code"
+              value={personalAddress.zipCode}
+              placeholder="Auto"
+              editable={false}
+            />
+          </View>
+          <View style={styles.addressColumn}>
+            <LabeledInput
+              label="House number (optional)"
+              value={personalAddress.houseNumber}
+              onChangeText={(text) => updateAddress({ houseNumber: text })}
+              placeholder="House/Unit"
+            />
+          </View>
+        </View>
+        <LabeledInput
+          label="Street (optional)"
+          value={personalAddress.street}
+          onChangeText={(text) => updateAddress({ street: text })}
+          placeholder="Street"
+        />
+        <View style={styles.profilePhotoWrapper}>
+          <Text style={styles.label}>Profile photo</Text>
+          <ProfilePhotoCard
+            value={formData.personalInfo.profilePhoto}
+            onTakePhoto={() => takePhoto("personalInfo", "profilePhoto")}
+            onUploadPhoto={() =>
+              pickFromLibrary("personalInfo", "profilePhoto")
+            }
+          />
+        </View>
+      </Section>
+
+      <Section title="Driver's license">
+        <Text style={styles.helperText}>
+          Only professional driver's licenses are accepted.
+        </Text>
+        <LabeledInput
+          label="Driver's license number"
+          value={formData.driversLicense.dlNumber}
+          onChangeText={(text) =>
+            updateField("driversLicense", "dlNumber", text)
+          }
+        />
+        <LabeledInput
+          label="License expiry date"
+          placeholder="YYYY-MM-DD"
+          value={formData.driversLicense.dlExpiry}
+          onChangeText={(text) =>
+            updateField("driversLicense", "dlExpiry", text)
+          }
+        />
+        <AttachmentPicker
+          label="Upload license front"
+          value={formData.driversLicense.frontImage}
+          onPick={() => requestImage("driversLicense", "frontImage")}
+        />
+        <AttachmentPicker
+          label="Upload license back"
+          value={formData.driversLicense.backImage}
+          onPick={() => requestImage("driversLicense", "backImage")}
+        />
+      </Section>
+
+      <Section title="Emergency contact">
+        <LabeledInput
+          label="Contact name"
+          value={formData.emergencyContact.name}
+          onChangeText={(text) => updateField("emergencyContact", "name", text)}
+        />
+        <LabeledInput
+          label="Relationship"
+          value={formData.emergencyContact.relationship}
+          onChangeText={(text) =>
+            updateField("emergencyContact", "relationship", text)
+          }
+        />
+        <LabeledInput
+          label="Phone number"
+          keyboardType="phone-pad"
+          value={formData.emergencyContact.phoneNumber}
+          onChangeText={(text) =>
+            updateField("emergencyContact", "phoneNumber", text)
+          }
+        />
+      </Section>
+
+      <Section title="Vehicle information">
+        <LabeledInput
+          label="Make"
+          value={formData.vehicleInfo.make}
+          onChangeText={(text) => updateField("vehicleInfo", "make", text)}
+        />
+        <LabeledInput
+          label="Model"
+          value={formData.vehicleInfo.model}
+          onChangeText={(text) => updateField("vehicleInfo", "model", text)}
+        />
+        <LabeledInput
+          label="Year"
+          keyboardType="number-pad"
+          value={formData.vehicleInfo.year}
+          onChangeText={(text) => updateField("vehicleInfo", "year", text)}
+        />
+        <LabeledInput
+          label="Color"
+          value={formData.vehicleInfo.color}
+          onChangeText={(text) => updateField("vehicleInfo", "color", text)}
+        />
+        <LabeledInput
+          label="Plate number"
+          autoCapitalize="characters"
+          value={formData.vehicleInfo.plateNumber}
+          onChangeText={(text) =>
+            updateField("vehicleInfo", "plateNumber", text)
+          }
+        />
+      </Section>
+
+      <Section title="Vehicle documents">
+        <LabeledInput
+          label="OR/CR number"
+          value={formData.vehicleDocuments.registrationNumber}
+          onChangeText={(text) =>
+            updateField("vehicleDocuments", "registrationNumber", text)
+          }
+        />
+        <LabeledInput
+          label="Registration expiry"
+          placeholder="YYYY-MM-DD"
+          value={formData.vehicleDocuments.registrationExpiry}
+          onChangeText={(text) =>
+            updateField("vehicleDocuments", "registrationExpiry", text)
+          }
+        />
+        <AttachmentPicker
+          label="Upload OR/CR image"
+          value={formData.vehicleDocuments.orCrImage}
+          onPick={() => requestImage("vehicleDocuments", "orCrImage")}
+        />
+      </Section>
+
+      <Section title="Vehicle photos">
+        <AttachmentPicker
+          label="Vehicle front photo"
+          value={formData.vehiclePhotos.front}
+          onPick={() => requestImage("vehiclePhotos", "front")}
+        />
+        <AttachmentPicker
+          label="Vehicle rear photo"
+          value={formData.vehiclePhotos.rear}
+          onPick={() => requestImage("vehiclePhotos", "rear")}
+        />
+      </Section>
+
+      <Section title="Vehicle ownership">
+        <LabeledInput
+          label="Registered owner name"
+          value={formData.vehicleOwnership.ownerName}
+          onChangeText={(text) =>
+            updateField("vehicleOwnership", "ownerName", text)
+          }
+        />
+        <Text style={styles.label}>Ownership type</Text>
+        <View style={styles.pillRow}>
+          {ownershipOptions.map((option) => (
+            <View key={option.value} style={styles.pillWrapper}>
+              <OptionPill
+                label={option.label}
+                selected={
+                  formData.vehicleOwnership.ownershipType === option.value
+                }
+                onPress={() =>
+                  updateField("vehicleOwnership", "ownershipType", option.value)
+                }
+              />
+            </View>
+          ))}
+        </View>
+        <AttachmentPicker
+          label="Supporting document (e.g. authorization letter)"
+          value={formData.vehicleOwnership.supportingDoc}
+          onPick={() => requestImage("vehicleOwnership", "supportingDoc")}
+        />
+      </Section>
+
+      <Section title="Government IDs">
+        <LabeledInput
+          label="TIN number"
+          keyboardType="number-pad"
+          value={formData.governmentIds.tinNumber}
+          onChangeText={(text) =>
+            updateField("governmentIds", "tinNumber", text)
+          }
+        />
+        <LabeledInput
+          label="SSS number"
+          keyboardType="number-pad"
+          value={formData.governmentIds.sssNumber}
+          onChangeText={(text) =>
+            updateField("governmentIds", "sssNumber", text)
+          }
+        />
+      </Section>
+
+      <TouchableOpacity
+        style={[styles.button, submitting && styles.buttonDisabled]}
+        disabled={submitting}
+        onPress={handleSubmit}
+      >
+        {submitting ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.buttonText}>Submit application</Text>
+        )}
+      </TouchableOpacity>
+
+      <View style={styles.loginContainer}>
+        <Text style={styles.loginText}>Already have an account?</Text>
+        <Link href="/login" style={styles.loginLink}>
+          Login
+        </Link>
+      </View>
+
+      <SelectionModal
+        visible={addressModalVisible}
+        title={
+          selectionContext === "accountRegion"
+            ? "Select region"
+            : `Select ${selectionContext ?? "option"}`
+        }
+        options={selectionOptions}
+        onSelect={handleSelectOption}
+        onClose={() => {
+          setSelectionContext(null);
+          setAddressModalVisible(false);
+        }}
+      />
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flexGrow: 1,
+    padding: 20,
+    backgroundColor: "#fff",
+  },
+  logo: {
+    alignSelf: "center",
+    marginBottom: 10,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "bold",
+    marginBottom: 24,
+    textAlign: "center",
+    color: "#007bff",
+  },
+  section: {
+    borderWidth: 1,
+    borderColor: "#e1e1e1",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    backgroundColor: "#fafafa",
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    marginBottom: 12,
+    color: "#333",
+  },
+  field: {
+    marginBottom: 12,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: "500",
+    marginBottom: 6,
+    color: "#444",
+  },
+  helperText: {
+    fontSize: 13,
+    color: "#666",
+    marginBottom: 10,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#d4d4d8",
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: "#fff",
+  },
+  multilineInput: {
+    minHeight: 80,
+    textAlignVertical: "top",
+  },
+  pillRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: 12,
+  },
+  pillWrapper: {
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  pill: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#d4d4d8",
+  },
+  pillSelected: {
+    backgroundColor: "#1E90FF",
+    borderColor: "#1E90FF",
+  },
+  pillText: {
+    color: "#555",
+    fontWeight: "500",
+  },
+  pillTextSelected: {
+    color: "#fff",
+  },
+  attachmentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 12,
+  },
+  attachmentInfo: {
+    flex: 1,
+  },
+  attachmentPreview: {
+    width: 160,
+    height: 90,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#d4d4d8",
+  },
+  attachmentPlaceholder: {
+    fontSize: 13,
+    color: "#888",
+  },
+  profilePhotoWrapper: {
+    gap: 12,
+    marginBottom: 12,
+  },
+  profilePhotoCard: {
+    borderWidth: 1,
+    borderColor: "#d4d4d8",
+    borderRadius: 12,
+    padding: 12,
+    alignItems: "center",
+    backgroundColor: "#fff",
+    gap: 12,
+  },
+  profilePhoto: {
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    borderWidth: 2,
+    borderColor: "#1E90FF",
+  },
+  profilePhotoPlaceholder: {
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    borderWidth: 1,
+    borderColor: "#d4d4d8",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f8fafc",
+  },
+  profilePhotoActions: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  secondaryButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#1E90FF",
+  },
+  secondaryButtonText: {
+    color: "#1E90FF",
+    fontWeight: "600",
+  },
+  button: {
+    backgroundColor: "#32CD32",
+    padding: 16,
+    borderRadius: 10,
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  buttonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
+  loginContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    marginBottom: 40,
+  },
+  loginText: {
+    fontSize: 14,
+    color: "#555",
+    marginRight: 5,
+  },
+  loginLink: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#1E90FF",
+  },
+});
