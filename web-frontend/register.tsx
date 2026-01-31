@@ -9,7 +9,10 @@ import {
   Alert,
   FlatList,
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
+  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -18,9 +21,14 @@ import {
   View,
 } from "react-native";
 
+const ensureApiSuffix = (baseUrl: string) => {
+  const trimmed = baseUrl.replace(/\/$/, "");
+  return trimmed.endsWith("/api") ? trimmed : `${trimmed}/api`;
+};
+
 const resolveApiBaseUrl = () => {
   if (process.env.EXPO_PUBLIC_API_URL) {
-    return process.env.EXPO_PUBLIC_API_URL;
+    return ensureApiSuffix(process.env.EXPO_PUBLIC_API_URL);
   }
 
   const hostUri =
@@ -29,7 +37,7 @@ const resolveApiBaseUrl = () => {
     Constants.manifest?.debuggerHost;
 
   if (!hostUri) {
-    return "http://localhost:5000/api";
+    return ensureApiSuffix("http://localhost:5000");
   }
 
   const hostname = hostUri.split(":")[0];
@@ -38,10 +46,10 @@ const resolveApiBaseUrl = () => {
     hostname === "127.0.0.1" ||
     hostname === "0.0.0.0"
   ) {
-    return "http://localhost:5000/api";
+    return ensureApiSuffix("http://localhost:5000");
   }
 
-  return `http://${hostname}:5000/api`;
+  return ensureApiSuffix(`http://${hostname}:5000`);
 };
 
 const API_BASE_URL = resolveApiBaseUrl();
@@ -967,561 +975,561 @@ export default function RegisterScreen() {
   };
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.container}
-      keyboardShouldPersistTaps="handled"
-    >
-      <MaterialCommunityIcons
-        name="motorbike"
-        size={96}
-        color="#1E90FF"
-        style={styles.logo}
-      />
-      <Text style={styles.title}>Apply as a MotoRide Driver</Text>
-
-      <Section title="Account information">
-        <LabeledInput
-          label="Mobile number"
-          keyboardType="phone-pad"
-          placeholder="e.g. +63 917 123 4567"
-          value={formData.accountInfo.mobileNumber}
-          onChangeText={(text) =>
-            updateField("accountInfo", "mobileNumber", text)
-          }
-        />
-        <SelectField
-          label="Region"
-          placeholder="Select region"
-          value={formData.accountInfo.region}
-          onPress={() => openSelection("accountRegion")}
-        />
-        <SelectField
-          label="Vehicle type"
-          placeholder="Select vehicle type"
-          value={formData.accountInfo.vehicleType}
-          onPress={() => openSelection("vehicleType")}
-        />
-        <Text style={styles.label}>Employment availability</Text>
-        <View style={styles.pillRow}>
-          {employmentOptions.map((option) => (
-            <OptionPill
-              key={option.value}
-              label={option.label}
-              selected={formData.accountInfo.employmentType === option.value}
-              onPress={() =>
-                updateField("accountInfo", "employmentType", option.value)
-              }
-            />
-          ))}
-        </View>
-      </Section>
-
-      <Section title="Personal information">
-        <LabeledInput
-          label="First name"
-          value={formData.personalInfo.firstName}
-          onChangeText={(text) =>
-            updateField("personalInfo", "firstName", text)
-          }
-        />
-        <LabeledInput
-          label="Middle name"
-          value={formData.personalInfo.middleName}
-          onChangeText={(text) =>
-            updateField("personalInfo", "middleName", text)
-          }
-        />
-        <LabeledInput
-          label="Last name"
-          value={formData.personalInfo.lastName}
-          onChangeText={(text) => updateField("personalInfo", "lastName", text)}
-        />
-        <LabeledInput
-          label="Email address"
-          keyboardType="email-address"
-          autoCapitalize="none"
-          value={formData.personalInfo.email}
-          onChangeText={(text) => updateField("personalInfo", "email", text)}
-        />
-        <LabeledInput
-          label="Date of birth"
-          placeholder="YYYY-MM-DD"
-          value={formData.personalInfo.dateOfBirth}
-          onChangeText={(text) =>
-            updateField("personalInfo", "dateOfBirth", text)
-          }
-        />
-        <Text style={styles.label}>Sex</Text>
-        <View style={styles.pillRow}>
-          {sexOptions.map((option) => (
-            <OptionPill
-              key={option.value}
-              label={option.label}
-              selected={formData.personalInfo.sex === option.value}
-              onPress={() => updateField("personalInfo", "sex", option.value)}
-            />
-          ))}
-        </View>
-
-        <Text style={[styles.label, styles.addressHeading]}>
-          Current address
-        </Text>
-        <SelectField
-          label="Region"
-          placeholder="Select region"
-          value={personalAddress.region}
-          onPress={() => openSelection("addressRegion")}
-        />
-        <SelectField
-          label="Province"
-          placeholder={
-            personalAddress.region ? "Select province" : "Select region first"
-          }
-          value={personalAddress.province}
-          disabled={!personalAddress.regionCode}
-          onPress={() => openSelection("province")}
-        />
-        <SelectField
-          label="Municipality / City"
-          placeholder={
-            personalAddress.province
-              ? "Select municipality"
-              : "Select province first"
-          }
-          value={personalAddress.municipality}
-          disabled={!personalAddress.provinceCode}
-          onPress={() => openSelection("municipality")}
-        />
-        <SelectField
-          label="Barangay"
-          placeholder={
-            personalAddress.municipality
-              ? "Select barangay"
-              : "Select city first"
-          }
-          value={personalAddress.barangay}
-          disabled={!personalAddress.municipalityCode}
-          onPress={() => openSelection("barangay")}
-        />
-        <View style={styles.addressRow}>
-          <View style={styles.addressColumn}>
-            <LabeledInput
-              label="ZIP code"
-              value={personalAddress.zipCode}
-              placeholder="Enter ZIP"
-              keyboardType="number-pad"
-              onChangeText={(text) => updateAddress({ zipCode: text })}
-            />
-          </View>
-          <View style={styles.addressColumn}>
-            <LabeledInput
-              label="House number (optional)"
-              placeholder="House / Unit"
-              value={personalAddress.houseNumber}
-              onChangeText={(text) => updateAddress({ houseNumber: text })}
-            />
-          </View>
-        </View>
-        <LabeledInput
-          label="Street (optional)"
-          placeholder="Street name"
-          value={personalAddress.street}
-          onChangeText={(text) => updateAddress({ street: text })}
-        />
-
-        <Text style={styles.label}>Profile photo</Text>
-        <ProfilePhotoCard
-          value={formData.personalInfo.profilePhoto}
-          onCapture={() => captureImage("personalInfo", "profilePhoto")}
-          onUpload={() => pickImage("personalInfo", "profilePhoto")}
-        />
-      </Section>
-
-      <Section title="Driver's license">
-        <LabeledInput
-          label="License number"
-          value={formData.driversLicense.dlNumber}
-          onChangeText={(text) =>
-            updateField("driversLicense", "dlNumber", text)
-          }
-        />
-        <LabeledInput
-          label="License expiry"
-          placeholder="YYYY-MM-DD"
-          value={formData.driversLicense.dlExpiry}
-          onChangeText={(text) =>
-            updateField("driversLicense", "dlExpiry", text)
-          }
-        />
-        <AttachmentPicker
-          label="License front"
-          value={formData.driversLicense.frontImage}
-          onPick={() => pickImage("driversLicense", "frontImage")}
-        />
-        <AttachmentPicker
-          label="License back"
-          value={formData.driversLicense.backImage}
-          onPick={() => pickImage("driversLicense", "backImage")}
-        />
-      </Section>
-
-      <Section title="Emergency contact">
-        <LabeledInput
-          label="Full name"
-          value={formData.emergencyContact.name}
-          onChangeText={(text) => updateField("emergencyContact", "name", text)}
-        />
-        <LabeledInput
-          label="Relationship"
-          value={formData.emergencyContact.relationship}
-          onChangeText={(text) =>
-            updateField("emergencyContact", "relationship", text)
-          }
-        />
-        <LabeledInput
-          label="Phone number"
-          keyboardType="phone-pad"
-          value={formData.emergencyContact.phoneNumber}
-          onChangeText={(text) =>
-            updateField("emergencyContact", "phoneNumber", text)
-          }
-        />
-      </Section>
-
-      <Section title="Vehicle information">
-        <LabeledInput
-          label="Make"
-          value={formData.vehicleInfo.make}
-          onChangeText={(text) => updateField("vehicleInfo", "make", text)}
-        />
-        <LabeledInput
-          label="Model"
-          value={formData.vehicleInfo.model}
-          onChangeText={(text) => updateField("vehicleInfo", "model", text)}
-        />
-        <LabeledInput
-          label="Year"
-          keyboardType="numeric"
-          value={formData.vehicleInfo.year}
-          onChangeText={(text) => updateField("vehicleInfo", "year", text)}
-        />
-        <LabeledInput
-          label="Color"
-          value={formData.vehicleInfo.color}
-          onChangeText={(text) => updateField("vehicleInfo", "color", text)}
-        />
-        <LabeledInput
-          label="Plate number"
-          autoCapitalize="characters"
-          value={formData.vehicleInfo.plateNumber}
-          onChangeText={(text) =>
-            updateField("vehicleInfo", "plateNumber", text)
-          }
-        />
-      </Section>
-
-      <Section title="Vehicle documents">
-        <LabeledInput
-          label="Registration number"
-          value={formData.vehicleDocuments.registrationNumber}
-          onChangeText={(text) =>
-            updateField("vehicleDocuments", "registrationNumber", text)
-          }
-        />
-        <LabeledInput
-          label="Registration expiry"
-          placeholder="YYYY-MM-DD"
-          value={formData.vehicleDocuments.registrationExpiry}
-          onChangeText={(text) =>
-            updateField("vehicleDocuments", "registrationExpiry", text)
-          }
-        />
-        <AttachmentPicker
-          label="OR/CR document"
-          value={formData.vehicleDocuments.orCrImage}
-          onPick={() => pickImage("vehicleDocuments", "orCrImage")}
-        />
-      </Section>
-
-      <Section title="Vehicle photos">
-        <AttachmentPicker
-          label="Front photo"
-          value={formData.vehiclePhotos.front}
-          onPick={() => pickImage("vehiclePhotos", "front")}
-        />
-        <AttachmentPicker
-          label="Rear photo"
-          value={formData.vehiclePhotos.rear}
-          onPick={() => pickImage("vehiclePhotos", "rear")}
-        />
-      </Section>
-
-      <Section title="Vehicle ownership">
-        <LabeledInput
-          label="Owner name"
-          value={formData.vehicleOwnership.ownerName}
-          onChangeText={(text) =>
-            updateField("vehicleOwnership", "ownerName", text)
-          }
-        />
-        <Text style={styles.label}>Ownership type</Text>
-        <View style={styles.pillRow}>
-          {ownershipOptions.map((option) => (
-            <OptionPill
-              key={option.value}
-              label={option.label}
-              selected={
-                formData.vehicleOwnership.ownershipType === option.value
-              }
-              onPress={() =>
-                updateField("vehicleOwnership", "ownershipType", option.value)
-              }
-            />
-          ))}
-        </View>
-        <AttachmentPicker
-          label="Supporting document"
-          value={formData.vehicleOwnership.supportingDoc}
-          onPick={() => pickImage("vehicleOwnership", "supportingDoc")}
-        />
-      </Section>
-
-      <Section title="Government IDs">
-        <LabeledInput
-          label="TIN number"
-          keyboardType="number-pad"
-          value={formData.governmentIds.tinNumber}
-          onChangeText={(text) =>
-            updateField("governmentIds", "tinNumber", text)
-          }
-        />
-        <LabeledInput
-          label="SSS number"
-          keyboardType="number-pad"
-          value={formData.governmentIds.sssNumber}
-          onChangeText={(text) =>
-            updateField("governmentIds", "sssNumber", text)
-          }
-        />
-      </Section>
-
-      <TouchableOpacity
-        style={[styles.button, submitting && styles.buttonDisabled]}
-        disabled={submitting}
-        onPress={handleSubmit}
+    <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 80}
       >
-        {submitting ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>Submit application</Text>
-        )}
-      </TouchableOpacity>
+        <ScrollView
+          contentContainerStyle={styles.container}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.heroHeader}>
+            <View style={styles.heroIconWrap}>
+              <MaterialCommunityIcons
+                name="motorbike"
+                size={48}
+                color="#ffffff"
+              />
+            </View>
+            <View style={styles.heroTextGroup}>
+              <Text style={styles.heroTitle}>Apply as a MotoRide Driver</Text>
+              <Text style={styles.heroSubtitle}>
+                Help riders get around faster. Complete the form below to start
+                the onboarding process.
+              </Text>
+            </View>
+          </View>
 
-      <View style={styles.loginContainer}>
-        <Text style={styles.loginText}>Already have an account?</Text>
-        <Link href="/login" style={styles.loginLink}>
-          Login
-        </Link>
-      </View>
+          <Section title="Account information">
+            <LabeledInput
+              label="Mobile number"
+              keyboardType="phone-pad"
+              placeholder="e.g. +63 917 123 4567"
+              value={formData.accountInfo.mobileNumber}
+              onChangeText={(text) =>
+                updateField("accountInfo", "mobileNumber", text)
+              }
+            />
+            <SelectField
+              label="Region"
+              placeholder="Select region"
+              value={formData.accountInfo.region}
+              onPress={() => openSelection("accountRegion")}
+            />
+            <SelectField
+              label="Vehicle type"
+              placeholder="Select vehicle type"
+              value={formData.accountInfo.vehicleType}
+              onPress={() => openSelection("vehicleType")}
+            />
+            <Text style={styles.label}>Employment availability</Text>
+            <View style={styles.pillRow}>
+              {employmentOptions.map((option) => (
+                <OptionPill
+                  key={option.value}
+                  label={option.label}
+                  selected={
+                    formData.accountInfo.employmentType === option.value
+                  }
+                  onPress={() =>
+                    updateField("accountInfo", "employmentType", option.value)
+                  }
+                />
+              ))}
+            </View>
+          </Section>
 
-      <SelectionModal
-        visible={selectionVisible}
-        loading={selectionLoading}
-        title={
-          selectionKind === "accountRegion"
-            ? "Select account region"
-            : selectionKind === "vehicleType"
-              ? "Select vehicle type"
-              : selectionKind === "addressRegion"
-                ? "Select address region"
-                : selectionKind === "province"
+          <Section title="Personal information">
+            <LabeledInput
+              label="First name"
+              value={formData.personalInfo.firstName}
+              onChangeText={(text) =>
+                updateField("personalInfo", "firstName", text)
+              }
+            />
+            <LabeledInput
+              label="Middle name"
+              value={formData.personalInfo.middleName}
+              onChangeText={(text) =>
+                updateField("personalInfo", "middleName", text)
+              }
+            />
+            <LabeledInput
+              label="Last name"
+              value={formData.personalInfo.lastName}
+              onChangeText={(text) =>
+                updateField("personalInfo", "lastName", text)
+              }
+            />
+            <LabeledInput
+              label="Email address"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              value={formData.personalInfo.email}
+              onChangeText={(text) =>
+                updateField("personalInfo", "email", text)
+              }
+            />
+            <LabeledInput
+              label="Date of birth"
+              placeholder="YYYY-MM-DD"
+              value={formData.personalInfo.dateOfBirth}
+              onChangeText={(text) =>
+                updateField("personalInfo", "dateOfBirth", text)
+              }
+            />
+            <Text style={styles.label}>Sex</Text>
+            <View style={styles.pillRow}>
+              {sexOptions.map((option) => (
+                <OptionPill
+                  key={option.value}
+                  label={option.label}
+                  selected={formData.personalInfo.sex === option.value}
+                  onPress={() =>
+                    updateField("personalInfo", "sex", option.value)
+                  }
+                />
+              ))}
+            </View>
+
+            <Text style={[styles.label, styles.addressHeading]}>
+              Current address
+            </Text>
+            <SelectField
+              label="Region"
+              placeholder="Select region"
+              value={personalAddress.region}
+              onPress={() => openSelection("addressRegion")}
+            />
+            <SelectField
+              label="Province"
+              placeholder={
+                personalAddress.region
                   ? "Select province"
-                  : selectionKind === "municipality"
-                    ? "Select municipality"
-                    : selectionKind === "barangay"
-                      ? "Select barangay"
-                      : "Select"
-        }
-        options={selectionOptions}
-        onSelect={handleSelectOption}
-        onClose={() => {
-          setSelectionVisible(false);
-          setSelectionKind(null);
-          setSelectionLoading(false);
-        }}
-      />
-    </ScrollView>
+                  : "Select region first"
+              }
+              value={personalAddress.province}
+              disabled={!personalAddress.regionCode}
+              onPress={() => openSelection("province")}
+            />
+            <SelectField
+              label="Municipality / City"
+              placeholder={
+                personalAddress.province
+                  ? "Select municipality"
+                  : "Select province first"
+              }
+              value={personalAddress.municipality}
+              disabled={!personalAddress.provinceCode}
+              onPress={() => openSelection("municipality")}
+            />
+            <SelectField
+              label="Barangay"
+              placeholder={
+                personalAddress.municipality
+                  ? "Select barangay"
+                  : "Select city first"
+              }
+              value={personalAddress.barangay}
+              disabled={!personalAddress.municipalityCode}
+              onPress={() => openSelection("barangay")}
+            />
+            <View style={styles.addressRow}>
+              <View style={styles.addressColumn}>
+                <LabeledInput
+                  label="ZIP code"
+                  value={personalAddress.zipCode}
+                  placeholder="Enter ZIP"
+                  keyboardType="number-pad"
+                  onChangeText={(text) => updateAddress({ zipCode: text })}
+                />
+              </View>
+              <View style={styles.addressColumn}>
+                <LabeledInput
+                  label="House number (optional)"
+                  placeholder="House / Unit"
+                  value={personalAddress.houseNumber}
+                  onChangeText={(text) => updateAddress({ houseNumber: text })}
+                />
+              </View>
+            </View>
+            <LabeledInput
+              label="Street (optional)"
+              placeholder="Street name"
+              value={personalAddress.street}
+              onChangeText={(text) => updateAddress({ street: text })}
+            />
+
+            <Text style={styles.label}>Profile photo</Text>
+            <ProfilePhotoCard
+              value={formData.personalInfo.profilePhoto}
+              onCapture={() => captureImage("personalInfo", "profilePhoto")}
+              onUpload={() => pickImage("personalInfo", "profilePhoto")}
+            />
+          </Section>
+
+          <Section title="Driver's license">
+            <LabeledInput
+              label="License number"
+              value={formData.driversLicense.dlNumber}
+              onChangeText={(text) =>
+                updateField("driversLicense", "dlNumber", text)
+              }
+            />
+            <LabeledInput
+              label="License expiry"
+              placeholder="YYYY-MM-DD"
+              value={formData.driversLicense.dlExpiry}
+              onChangeText={(text) =>
+                updateField("driversLicense", "dlExpiry", text)
+              }
+            />
+            <AttachmentPicker
+              label="License front"
+              value={formData.driversLicense.frontImage}
+              onPick={() => pickImage("driversLicense", "frontImage")}
+            />
+            <AttachmentPicker
+              label="License back"
+              value={formData.driversLicense.backImage}
+              onPick={() => pickImage("driversLicense", "backImage")}
+            />
+          </Section>
+
+          <Section title="Emergency contact">
+            <LabeledInput
+              label="Full name"
+              value={formData.emergencyContact.name}
+              onChangeText={(text) =>
+                updateField("emergencyContact", "name", text)
+              }
+            />
+            <LabeledInput
+              label="Relationship"
+              value={formData.emergencyContact.relationship}
+              onChangeText={(text) =>
+                updateField("emergencyContact", "relationship", text)
+              }
+            />
+            <LabeledInput
+              label="Phone number"
+              keyboardType="phone-pad"
+              value={formData.emergencyContact.phoneNumber}
+              onChangeText={(text) =>
+                updateField("emergencyContact", "phoneNumber", text)
+              }
+            />
+          </Section>
+
+          <Section title="Vehicle information">
+            <LabeledInput
+              label="Make"
+              value={formData.vehicleInfo.make}
+              onChangeText={(text) => updateField("vehicleInfo", "make", text)}
+            />
+            <LabeledInput
+              label="Model"
+              value={formData.vehicleInfo.model}
+              onChangeText={(text) => updateField("vehicleInfo", "model", text)}
+            />
+            <LabeledInput
+              label="Year"
+              keyboardType="numeric"
+              value={formData.vehicleInfo.year}
+              onChangeText={(text) => updateField("vehicleInfo", "year", text)}
+            />
+            <LabeledInput
+              label="Color"
+              value={formData.vehicleInfo.color}
+              onChangeText={(text) => updateField("vehicleInfo", "color", text)}
+            />
+            <LabeledInput
+              label="Plate number"
+              autoCapitalize="characters"
+              value={formData.vehicleInfo.plateNumber}
+              onChangeText={(text) =>
+                updateField("vehicleInfo", "plateNumber", text)
+              }
+            />
+          </Section>
+
+          <Section title="Vehicle documents">
+            <LabeledInput
+              label="Registration number"
+              value={formData.vehicleDocuments.registrationNumber}
+              onChangeText={(text) =>
+                updateField("vehicleDocuments", "registrationNumber", text)
+              }
+            />
+            <LabeledInput
+              label="Registration expiry"
+              placeholder="YYYY-MM-DD"
+              value={formData.vehicleDocuments.registrationExpiry}
+              onChangeText={(text) =>
+                updateField("vehicleDocuments", "registrationExpiry", text)
+              }
+            />
+            <AttachmentPicker
+              label="OR/CR document"
+              value={formData.vehicleDocuments.orCrImage}
+              onPick={() => pickImage("vehicleDocuments", "orCrImage")}
+            />
+          </Section>
+
+          <Section title="Vehicle photos">
+            <AttachmentPicker
+              label="Front photo"
+              value={formData.vehiclePhotos.front}
+              onPick={() => pickImage("vehiclePhotos", "front")}
+            />
+            <AttachmentPicker
+              label="Rear photo"
+              value={formData.vehiclePhotos.rear}
+              onPick={() => pickImage("vehiclePhotos", "rear")}
+            />
+          </Section>
+
+          <Section title="Vehicle ownership">
+            <LabeledInput
+              label="Owner name"
+              value={formData.vehicleOwnership.ownerName}
+              onChangeText={(text) =>
+                updateField("vehicleOwnership", "ownerName", text)
+              }
+            />
+            <Text style={styles.label}>Ownership type</Text>
+            <View style={styles.pillRow}>
+              {ownershipOptions.map((option) => (
+                <OptionPill
+                  key={option.value}
+                  label={option.label}
+                  selected={
+                    formData.vehicleOwnership.ownershipType === option.value
+                  }
+                  onPress={() =>
+                    updateField(
+                      "vehicleOwnership",
+                      "ownershipType",
+                      option.value,
+                    )
+                  }
+                />
+              ))}
+            </View>
+            <AttachmentPicker
+              label="Supporting document"
+              value={formData.vehicleOwnership.supportingDoc}
+              onPick={() => pickImage("vehicleOwnership", "supportingDoc")}
+            />
+          </Section>
+
+          <Section title="Government IDs">
+            <LabeledInput
+              label="TIN number"
+              keyboardType="number-pad"
+              value={formData.governmentIds.tinNumber}
+              onChangeText={(text) =>
+                updateField("governmentIds", "tinNumber", text)
+              }
+            />
+            <LabeledInput
+              label="SSS number"
+              keyboardType="number-pad"
+              value={formData.governmentIds.sssNumber}
+              onChangeText={(text) =>
+                updateField("governmentIds", "sssNumber", text)
+              }
+            />
+          </Section>
+
+          <TouchableOpacity
+            style={[styles.button, submitting && styles.buttonDisabled]}
+            disabled={submitting}
+            onPress={handleSubmit}
+          >
+            {submitting ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>Submit application</Text>
+            )}
+          </TouchableOpacity>
+
+          <View style={styles.loginContainer}>
+            <Text style={styles.loginText}>Already have an account?</Text>
+            <Link href="/login" style={styles.loginLinkAlt}>
+              Login
+            </Link>
+          </View>
+
+          <SelectionModal
+            visible={selectionVisible}
+            loading={selectionLoading}
+            title={
+              selectionKind === "accountRegion"
+                ? "Select account region"
+                : selectionKind === "vehicleType"
+                  ? "Select vehicle type"
+                  : selectionKind === "addressRegion"
+                    ? "Select address region"
+                    : selectionKind === "province"
+                      ? "Select province"
+                      : selectionKind === "municipality"
+                        ? "Select municipality"
+                        : selectionKind === "barangay"
+                          ? "Select barangay"
+                          : "Select"
+            }
+            options={selectionOptions}
+            onSelect={handleSelectOption}
+            onClose={() => {
+              setSelectionVisible(false);
+              setSelectionKind(null);
+              setSelectionLoading(false);
+            }}
+          />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#f5fbff",
+  },
+  keyboardView: {
+    flex: 1,
+  },
   container: {
     flexGrow: 1,
     padding: 20,
-    backgroundColor: "#fff",
+    backgroundColor: "#f5fbff",
+    gap: 16,
   },
-  logo: {
-    alignSelf: "center",
-    marginBottom: 8,
+  heroHeader: {
+    flexDirection: "row",
+    gap: 14,
+    backgroundColor: "#00a86b",
+    borderRadius: 28,
+    padding: 20,
+    alignItems: "center",
+    shadowColor: "#00a86b",
+    shadowOpacity: 0.25,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
   },
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 20,
-    color: "#0f172a",
+  heroIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroTextGroup: {
+    flex: 1,
+    gap: 6,
+  },
+  heroTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#ffffff",
+  },
+  heroSubtitle: {
+    color: "#d6f8ea",
+    fontSize: 14,
+    lineHeight: 20,
   },
   section: {
-    marginBottom: 20,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 12,
-    backgroundColor: "#fafafa",
+    marginBottom: 12,
+    padding: 18,
+    borderRadius: 20,
+    backgroundColor: "#ffffff",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: "700",
     marginBottom: 12,
-    color: "#111827",
-  },
-  field: {
-    marginBottom: 12,
+    color: "#061b26",
   },
   label: {
     fontSize: 13,
     fontWeight: "600",
     marginBottom: 6,
-    color: "#4b5563",
+    color: "#4a5b68",
   },
   addressHeading: {
-    marginTop: 12,
+    marginTop: 18,
   },
   input: {
     borderWidth: 1,
-    borderColor: "#d4d4d8",
-    borderRadius: 8,
+    borderColor: "#e0e8f0",
+    borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 15,
-    color: "#111",
-    backgroundColor: "#fff",
+    color: "#0f172a",
+    backgroundColor: "#f8fbff",
   },
   disabledInput: {
-    backgroundColor: "#f3f4f6",
-    color: "#6b7280",
-  },
-  multilineInput: {
-    minHeight: 88,
-    textAlignVertical: "top",
-  },
-  pillRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
+    backgroundColor: "#eff4f8",
+    color: "#8090a0",
   },
   pill: {
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#d4d4d8",
-    backgroundColor: "#fff",
+    borderColor: "#d7e6f2",
+    backgroundColor: "#ffffff",
   },
   pillSelected: {
-    backgroundColor: "#1E90FF",
-    borderColor: "#1E90FF",
+    backgroundColor: "#00a86b",
+    borderColor: "#00a86b",
   },
   pillText: {
-    color: "#475569",
+    color: "#4f5e6d",
     fontWeight: "500",
   },
   pillTextSelected: {
     color: "#fff",
   },
-  attachmentRow: {
+  pillRow: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 12,
-  },
-  attachmentInfo: {
-    flex: 1,
-    gap: 6,
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 8,
   },
   attachmentPreview: {
-    width: "100%",
-    height: 140,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#cbd5f5",
-  },
-  attachmentPlaceholder: {
-    color: "#9ca3af",
-    fontSize: 13,
-  },
-  secondaryButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#1E90FF",
-  },
-  secondaryButtonText: {
-    color: "#1E90FF",
-    fontWeight: "600",
-  },
-  selectField: {
-    borderWidth: 1,
-    borderColor: "#d4d4d8",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 12,
-    backgroundColor: "#fff",
-  },
-  selectFieldDisabled: {
-    opacity: 0.6,
-  },
-  selectFieldValueContainer: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-  },
-  selectFieldValue: {
-    fontWeight: "600",
-    color: "#111",
-  },
-  selectFieldPlaceholder: {
-    color: "#9ca3af",
-  },
-  addressRow: {
-    flexDirection: "row",
     gap: 12,
+    marginBottom: 12,
   },
   addressColumn: {
     flex: 1,
   },
   profilePhotoCard: {
     borderWidth: 1,
-    borderColor: "#d4d4d8",
-    borderRadius: 12,
+    borderColor: "#e0e8f0",
+    borderRadius: 16,
     padding: 16,
     marginTop: 8,
-  },
-  profilePhoto: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    alignSelf: "center",
-    marginBottom: 12,
+    backgroundColor: "#ffffff",
   },
   profilePhotoPlaceholder: {
     width: 140,
     height: 140,
     borderRadius: 70,
     borderWidth: 1,
-    borderColor: "#d4d4d8",
+    borderColor: "#e0e8f0",
     alignSelf: "center",
     alignItems: "center",
     justifyContent: "center",
@@ -1533,20 +1541,32 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 12,
   },
+  addressRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
   button: {
-    paddingVertical: 16,
-    borderRadius: 10,
-    backgroundColor: "#16a34a",
+    paddingVertical: 18,
+    borderRadius: 20,
+    backgroundColor: "#02894b",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 20,
+    shadowColor: "#02894b",
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   buttonText: {
     color: "#fff",
-    fontWeight: "bold",
-    fontSize: 16,
+    fontWeight: "700",
+    fontSize: 17,
+  },
+  loginLink: {
+    color: "#02894b",
+    fontWeight: "700",
   },
   loginContainer: {
     flexDirection: "row",
@@ -1557,7 +1577,7 @@ const styles = StyleSheet.create({
     color: "#475569",
     marginRight: 6,
   },
-  loginLink: {
+  loginLinkAlt: {
     color: "#1E90FF",
     fontWeight: "700",
   },
